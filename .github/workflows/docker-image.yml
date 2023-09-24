@@ -2,7 +2,7 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ] # The push is better because I don't want to action to happen after the pr is approved and merged
   pull_request:
     branches: none # [ "main" ]
   # Allows me to run manually as well
