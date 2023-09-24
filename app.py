@@ -63,7 +63,7 @@ for i,subject_type in enumerate(("radical","kanji","vocab")):
     graph_data.append(tmp_graph)
         
 
-app.title = "Avocado Analytics: Understand Your Avocados!"
+app.title = "WaniKani Analytics: Understand Your WaniKani!"
 
 app.layout = html.Div(
     children=[
