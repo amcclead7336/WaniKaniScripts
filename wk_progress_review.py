@@ -4,14 +4,11 @@ import sys
 import json
 import datetime
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plot
-from pprint import pprint
 
 WK_URL = "https://api.wanikani.com/v2/"
-datetime_string_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-VERBOSE = True
-REFRESH = False
+DATETIME_STRING_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+VERBOSE = False if os.environ["VERBOSE"] == "False" else True
+REFRESH = False if os.environ["REFRESH_DATA"] == "False" else True
 
 def vprint(string):
     if VERBOSE:
@@ -70,9 +67,9 @@ def create_level_data():
     times = []
     for level in level_data["data"]:
         if level['data']["passed_at"] is not None:
-            times.append((datetime.datetime.strptime(level['data']["started_at"], datetime_string_format), datetime.datetime.strptime(level['data']["passed_at"], datetime_string_format)))
+            times.append((datetime.datetime.strptime(level['data']["started_at"], DATETIME_STRING_FORMAT), datetime.datetime.strptime(level['data']["passed_at"], DATETIME_STRING_FORMAT)))
         else:
-            times.append((datetime.datetime.strptime(level['data']["started_at"], datetime_string_format), datetime.datetime.now()))
+            times.append((datetime.datetime.strptime(level['data']["started_at"], DATETIME_STRING_FORMAT), datetime.datetime.now()))
     
     diffs = [time[1] - time[0] for time in times]
     print(diffs)

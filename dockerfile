@@ -2,6 +2,10 @@ FROM python:3.10
 
 WORKDIR /opt/WK_Review
 
+ENV VERBOSE=False
+ENV REFRESH_DATA=False
+ENV DASH_DEBUG_MODE=False
+
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 RUN pip install gunicorn

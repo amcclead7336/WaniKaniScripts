@@ -6,12 +6,8 @@ import sys
 import pandas as pd
 import wk_progress_review
 
-if not os.environ.get("DASH_DEBUG_MODE"):
-    debug = False
-elif os.environ["DASH_DEBUG_MODE"] == "False":
-    debug = False
-else:
-    debug = True
+debug = False if os.environ["DASH_DEBUG_MODE"] == "False" else True
+
 
 if os.environ.get("APIKEY"):
     apikey = os.environ["APIKEY"]
