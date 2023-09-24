@@ -1,0 +1,25 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: none #[ "main" ]
+  pull_request:
+    branches: none #[ "main" ]
+  # Allows me to run manually as well
+  workflow_dispatch:
+
+#env:
+#  IMAGE_NAME: amcclead7336/wanikaniscripts
+#  IMAGE_TAG: v0.0.${{ github.run_number }}
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker image
+      run: docker build . --file dockerfile --tag wk_review:$(date +%s)
+      
