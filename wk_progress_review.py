@@ -9,7 +9,6 @@ import matplotlib.pyplot as plot
 from pprint import pprint
 
 WK_URL = "https://api.wanikani.com/v2/"
-AK_FILENAME = "wk_apikey.txt"
 datetime_string_format = "%Y-%m-%dT%H:%M:%S.%fZ"
 VERBOSE = True
 REFRESH = False
@@ -19,12 +18,12 @@ def vprint(string):
         print(string)
 
 
-def create_store():
-    if "Store" not in os.listdir():
-        os.mkdir("Store")
-        vprint("Created Store Dir")
+def create_dir(name):
+    if name not in os.listdir():
+        os.mkdir(name)
+        vprint(f"Created {name} Dir")
     else:
-        vprint("Store Exists")
+        vprint(f"{name} Exists")
 
 
 def collect_data(endpoint):
@@ -165,15 +164,13 @@ def collect_progress_data():
     out_df.to_csv("Data/progress_data.csv",index=False)
 
 
-def main():
-
-    with open(AK_FILENAME, "r") as f:
-        apikey = f.read().strip()
+def main(apikey):
 
     global AUTH_HEADER
     AUTH_HEADER = {"Authorization":f"Bearer {apikey}"}
 
-    create_store()
+    create_dir("Store")
+    create_dir("Data")
 
     create_level_data()
 
@@ -181,4 +178,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    pass

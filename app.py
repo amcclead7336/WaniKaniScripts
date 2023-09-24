@@ -1,7 +1,36 @@
 from dash import Dash
 from dash import dcc
 from dash import html
+import os
+import sys
 import pandas as pd
+import wk_progress_review
+
+if not os.environ.get("DASH_DEBUG_MODE"):
+    debug = False
+elif os.environ["DASH_DEBUG_MODE"] == "False":
+    debug = False
+else:
+    debug = True
+
+if os.environ.get("APIKEY"):
+    apikey = os.environ["APIKEY"]
+else:
+    print("Need to set Environment Var APIKEY")
+    sys.exit(1)
+
+external_stylesheets = [
+    {
+        "href": "https://fonts.googleapis.com/css2?"
+        "family=Lato:wght@400;700&display=swap",
+        "rel": "stylesheet",
+    },
+]
+
+app = Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server
+
+wk_progress_review.main(apikey)
 
 level_data = pd.read_csv("Data/level_data.csv")
 
@@ -37,15 +66,6 @@ for i,subject_type in enumerate(("radical","kanji","vocab")):
     
     graph_data.append(tmp_graph)
         
-
-external_stylesheets = [
-    {
-        "href": "https://fonts.googleapis.com/css2?"
-        "family=Lato:wght@400;700&display=swap",
-        "rel": "stylesheet",
-    },
-]
-app = Dash(__name__, external_stylesheets=external_stylesheets)
 
 app.title = "Avocado Analytics: Understand Your Avocados!"
 
@@ -104,4 +124,4 @@ app.layout = html.Div(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(host="0.0.0.0",port="8050",debug=debug)
