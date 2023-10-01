@@ -1,8 +1,12 @@
 from dash import Dash
 from dash import dcc
 from dash import html
+import plotly.graph_objects as go
+import plotly as py
+import plotly.express as px
 import os
 import sys
+import json
 import pandas as pd
 import wk_progress_review
 
@@ -15,6 +19,10 @@ else:
     print("Need to set Environment Var APIKEY")
     sys.exit(1)
 
+AUTH_HEADER = {"Authorization":f"Bearer {apikey}"}
+
+wk_progress_review.create_dir("Store")
+
 external_stylesheets = [
     {
         "href": "https://fonts.googleapis.com/css2?"
@@ -26,42 +34,18 @@ external_stylesheets = [
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
-wk_progress_review.main(apikey)
+level_data, avg_level_time = wk_progress_review.collect_level_data(AUTH_HEADER)
+progress_data, total_series = wk_progress_review.collect_progress_data(AUTH_HEADER)
+vlines = wk_progress_review.create_level_lines()
 
-level_data = pd.read_csv("Data/level_data.csv")
+level_fig = px.bar(x=level_data["Level"], y= level_data["Time_seconds"]/(60*60*24), title="Time Spent per Level", labels={"x":"Level","y":"Time in Days"})
 
-progress_data = pd.read_csv("Data/progress_data.csv")
-graph_data = []
+progress_fig = px.line(progress_data, x="Date",y="CumSum",color="Subject", title="Progress per Subject", labels={"x":"Time","y":"Characters"})
+for vline in vlines:
+    progress_fig.add_vline(x=vline, line_color="grey", line_dash="dash")
+progress_fig.add_trace(go.Line(x=total_series.index, y=total_series.values, name="Total"))
 
-for i,subject_type in enumerate(("radical","kanji","vocab")):
-    fig_data = []
 
-    for time in ("Unlock_times","Start_times","Passed_times"):
-        tmp_data = progress_data.query(f"Subject == '{subject_type}' and Des == '{time}'")
-        fig_data.append({
-            "x": tmp_data["Date"],
-            "y": tmp_data["CumSum"],
-            "type": "lines",
-            "name": time
-        })
-
-    tmp_graph = dcc.Graph(
-                        id=f"{subject_type}",
-                        config={"displayModeBar": False},
-                        figure={
-                            "data": fig_data[:],
-                            "layout": {
-                                "title": {
-                                    "text": f"{subject_type}",
-                                    "x": 0.05,
-                                    "xanchor": "left",
-                                },
-                            },
-                        },
-                    )
-    
-    graph_data.append(tmp_graph)
-        
 
 app.title = "WaniKani Analytics: Understand Your WaniKani!"
 
@@ -83,33 +67,24 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.Div(
-                    children=dcc.Graph(
-                        id="level-data",
+                    children=[ 
+                        dcc.Graph(
+                        id="level_fig",
                         config={"displayModeBar": False},
-                        figure={
-                            "data": [
-                                {
-                                    "x": level_data["Level"],
-                                    "y": level_data["Time_seconds"]/(60*60*24),
-                                    "type": "bar",
-                                },
-                            ],
-                            "layout": {
-                                "title": {
-                                    "text": "Time Per Level",
-                                    "x": 0.05,
-                                    "xanchor": "left",
-                                },
-                                "xaxis": {"fixedrange": True, 'title':'Level'},
-                                "yaxis": {"fixedrange": True, 'title':'Days'},
-                                "colorway": ["#17B897"],
-                            },
-                        },
+                        figure=level_fig,
                     ),
+                        html.P(children=f"Average time to complete Level: {avg_level_time}"),
+                        
+                    ],
                     className="card",
                 ),
+
                 html.Div(
-                    children=graph_data,
+                    children=dcc.Graph(
+                        id="progress_fig",
+                        config={"displayModeBar": False},
+                        figure=progress_fig,
+                    ),
                     className="card",
                 ),
             ],
@@ -120,4 +95,4 @@ app.layout = html.Div(
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",port="8050",debug=debug)
+    app.run(host="0.0.0.0",port="8050", debug=debug)
