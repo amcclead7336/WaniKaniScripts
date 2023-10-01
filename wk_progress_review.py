@@ -10,6 +10,7 @@ DATETIME_STRING_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 VERBOSE = False if os.environ["VERBOSE"] == "False" else True
 REFRESH = False if os.environ["REFRESH_DATA"] == "False" else True
 
+
 def vprint(string):
     if VERBOSE:
         print(string)
@@ -23,7 +24,7 @@ def create_dir(name):
         vprint(f"{name} Exists")
 
 
-def collect_data(endpoint):
+def collect_data(endpoint, AUTH_HEADER):
     endpoint_path = f"Store/{endpoint}.json"
     check_flag = os.path.exists(endpoint_path)
 
@@ -37,7 +38,7 @@ def collect_data(endpoint):
 
             if level_data['pages']['next_url'] is not None:
                 vprint("Next url is present")
-                tmp_data = requests.get(level_data['pages']['next_url'], headers=AUTH_HEADER)
+                tmp_data = requests.get(level_data['pages']['next_url'], headers=AUTH_HEADER).json()
                 level_data['data'] += tmp_data['data']
 
                 while tmp_data['pages']['next_url'] is not None:
@@ -46,7 +47,7 @@ def collect_data(endpoint):
 
 
             with open(endpoint_path, "w") as f:
-                f.write(json.dumps(req.json(),indent=2))
+                f.write(json.dumps(level_data,indent=2))
 
         else:
             print(req)
@@ -61,8 +62,8 @@ def collect_data(endpoint):
     return level_data
 
 
-def create_level_data():
-    level_data = collect_data("level_progressions")
+def collect_level_data(AUTH_HEADER):
+    level_data = collect_data("level_progressions", AUTH_HEADER)
 
     times = []
     for level in level_data["data"]:
@@ -91,88 +92,48 @@ def create_level_data():
                  "Time_seconds":seconds_diffs}
     time_df = pd.DataFrame(time_data)
 
-    time_df.to_csv("Data/level_data.csv", index=False)
-
-    # _, ax = plot.subplots(figsize=(15,7))
-    # bar_plot = sns.barplot(ax=ax, data=time_df, x="Level",y="Time")
-
-    # highest = int(max(seconds_diffs))
-    # day = 60*60*24
-    # ticks = range(0,highest,day)
-    # tick_labels = range(0,len(ticks))
-    # bar_plot.set_yticks(ticks)
-    # bar_plot.set_yticklabels(tick_labels)
-
-    # plot.show()
-    
-    # print(len(diffs))
-    # print(total_time)
-    # print(avg_time)
-
-    # return times
-    
-
-def time_collect(assignment_data, key):
-    u_data = []
-    s_data = []
-    p_data = []
-
-    for assignment in assignment_data['data']:
-        if assignment['data']['subject_type'] == key:
-            u_data.append(assignment['data']['unlocked_at'])
-            s_data.append(assignment['data']['started_at'])
-            p_data.append(assignment['data']['passed_at'])
-
-    return u_data[:], s_data[:], p_data[:]
+    return time_df.copy(), avg_time
 
 
+def collect_progress_data(AUTH_HEADER):
 
-def collect_progress_data():
-
-    assignment_data = collect_data("assignments")
+    assignment_data = collect_data("assignments", AUTH_HEADER)
 
     df_list = []
 
     for lesson_type in ("radical", "kanji", "vocabulary"):
 
-        u_data, s_data, p_data = time_collect(assignment_data, lesson_type)
-
-        df_list.append(pd.DataFrame({"Unlock_times":u_data,
-                        "Start_times":s_data,
-                        "Passed_times": p_data}))
+        df_list.append(pd.DataFrame({"Passed_times": [assignment['data']['passed_at'] for assignment in assignment_data['data'] if assignment['data']['subject_type'] == lesson_type] }))
         
-    r_df = df_list[0]
-    k_df = df_list[1]
-    v_df = df_list[2]
-
     rows_out = []
 
-    for subject_type, df in zip(("radical","kanji","vocab"),(r_df, k_df, v_df)):
-        for column in df.columns:
-            df[column] = pd.to_datetime(df[column])
-
-            tmp_df =r_df.groupby([df[column].dt.date]).count()[column]
-            tmp_series = tmp_df.cumsum()
-
-            for index, row in tmp_series.items():
-                rows_out.append([index,row,column,subject_type])
-
-    out_df = pd.DataFrame(rows_out, columns=['Date','CumSum','Des','Subject'])
-    out_df.to_csv("Data/progress_data.csv",index=False)
+    for subject_type, df in zip(("radical","kanji","vocab"), df_list):
+        df["Passed_times"] = pd.to_datetime(df["Passed_times"])
+        tmp_df = df.groupby([df["Passed_times"].dt.date]).count()["Passed_times"]
+        tmp_series = tmp_df.cumsum()
+        df_count_cumsum = pd.concat({"count":tmp_df, "cumsum":tmp_series}, axis=1)
 
 
-def main(apikey):
+        for index, row in df_count_cumsum.iterrows():
+            rows_out.append([index,row["count"],row['cumsum'],subject_type])
 
-    global AUTH_HEADER
-    AUTH_HEADER = {"Authorization":f"Bearer {apikey}"}
+    out_df = pd.DataFrame(rows_out, columns=['Date','count','CumSum','Subject'])
+    out_df["Date"] = pd.to_datetime(out_df["Date"])
 
-    create_dir("Store")
-    create_dir("Data")
+    total_series = out_df.sort_values("Date").groupby("Date").sum()["count"].cumsum()
+    print(total_series)
 
-    create_level_data()
-
-    collect_progress_data()
+    return out_df.copy(), total_series.copy()
 
 
-if __name__ == "__main__":
-    pass
+def create_level_lines():
+
+    with open("Store/level_progressions.json") as f:
+        level_prgressions = json.load(f)
+
+    vlines=[]
+    for _,level in enumerate(level_prgressions['data']):
+        if level["data"]["passed_at"] is not None:
+            vlines.append({"x": level["data"]["passed_at"], "line_dash":"dot"})
+    
+    return vlines.copy()
