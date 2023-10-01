@@ -9,7 +9,8 @@ WK_URL = "https://api.wanikani.com/v2/"
 DATETIME_STRING_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 VERBOSE = False if os.environ["VERBOSE"] == "False" else True
 REFRESH = False if os.environ["REFRESH_DATA"] == "False" else True
-
+# VERBOSE = True
+# REFRESH = False
 
 def vprint(string):
     if VERBOSE:
@@ -29,8 +30,8 @@ def collect_data(endpoint, AUTH_HEADER):
     check_flag = os.path.exists(endpoint_path)
 
     if not check_flag or REFRESH:
-        vprint(f"Collecting Data: {endpoint}")
-        req = requests.get(f"{WK_URL}/{endpoint}", headers=AUTH_HEADER)
+        vprint(f"Collecting Data: {WK_URL}{endpoint}")
+        req = requests.get(f"{WK_URL}{endpoint}", headers=AUTH_HEADER)
 
         if req.status_code == 200:
 
@@ -73,7 +74,7 @@ def collect_level_data(AUTH_HEADER):
             times.append((datetime.datetime.strptime(level['data']["started_at"], DATETIME_STRING_FORMAT), datetime.datetime.now()))
     
     diffs = [time[1] - time[0] for time in times]
-    print(diffs)
+
     
     total_time = 0
     for i,diff in enumerate(diffs):
@@ -121,7 +122,6 @@ def collect_progress_data(AUTH_HEADER):
     out_df["Date"] = pd.to_datetime(out_df["Date"])
 
     total_series = out_df.sort_values("Date").groupby("Date").sum()["count"].cumsum()
-    print(total_series)
 
     return out_df.copy(), total_series.copy()
 
@@ -137,3 +137,46 @@ def create_level_lines():
             vlines.append({"x": level["data"]["passed_at"], "line_dash":"dot"})
     
     return vlines.copy()
+
+
+def create_gantt_data(AUTH_HEADER):
+
+    current_time = datetime.datetime.now()
+    rad_data = collect_data("assignments?levels=5&subject_types=radical",AUTH_HEADER)
+    kanji_data = collect_data("assignments?levels=5&subject_types=kanji",AUTH_HEADER)
+    srs_interval_data = collect_data("spaced_repetition_systems?ids=1",AUTH_HEADER)
+    subject_data = collect_data("subjects?levels=5&types=radical,kanji",AUTH_HEADER)
+
+    interval_dict = {stage['position']: datetime.timedelta(days=0,seconds=stage['interval']) for stage in srs_interval_data['data'][0]['data']['stages'][1:6]}
+    subject_id_slug_dict = {sub['id']: sub['data']['slug'] for sub in subject_data['data']}
+
+    rad_out_list = []
+    kanji_out_list = []
+    for out_list, data_set in zip([rad_out_list, kanji_out_list],[rad_data,kanji_data]):
+        for subject in data_set['data']:
+            color = "Blue"
+            if not subject['data'].get("passed_at") and subject['data'].get('available_at'):
+                available_at_time = datetime.datetime.strptime(subject['data']['available_at'], DATETIME_STRING_FORMAT)
+                if available_at_time < current_time:
+                    color = "Green"
+                    available_at_time = current_time
+
+                subject_id = subject['data']['subject_id']
+                subject_name = subject_id_slug_dict[subject_id]
+                srs_stage = subject['data']['srs_stage']
+                finish_time = available_at_time + interval_dict[srs_stage]
+
+                out_list.append(dict(Task=f"SRS {srs_stage}",Start=available_at_time,Finish=finish_time,Resource=subject_name,Color=color))
+
+                if srs_stage < 4:
+                    for i in range(srs_stage+1, 5):
+                        available_at_time = finish_time
+                        finish_time = available_at_time + interval_dict[i]
+                        out_list.append(dict(Task=f"SRS {i}",Start=available_at_time,Finish=finish_time,Resource=subject_name,Color="Blue"))
+
+    r_df = pd.DataFrame(rad_out_list)
+    k_df = pd.DataFrame(kanji_out_list)
+
+    r_df = r_df.sort_values("Start", ascending=False)
+    k_df = k_df.sort_values("Start", ascending=False)
+    return r_df, k_df
