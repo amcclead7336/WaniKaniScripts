@@ -12,7 +12,6 @@ import wk_progress_review
 
 debug = False if os.environ["DASH_DEBUG_MODE"] == "False" else True
 
-
 if os.environ.get("APIKEY"):
     apikey = os.environ["APIKEY"]
 else:
@@ -50,9 +49,21 @@ for vline in vlines:
     progress_fig.add_vline(x=vline, line_color="grey", line_dash="dash")
 
 
-radical_df, kanji_df = wk_progress_review.create_gantt_data(AUTH_HEADER)
-rad_gantt_fig = px.timeline(radical_df, x_start="Start",x_end="Finish",y="Resource", color="Color")
-kanji_gantt_fig = px.timeline(kanji_df, x_start="Start",x_end="Finish",y="Resource", color="Color")
+radical_df, kanji_df, current_level = wk_progress_review.create_gantt_data(AUTH_HEADER)
+if not radical_df.empty:
+    rad_gantt_fig = px.timeline(radical_df, x_start="Start",x_end="Finish",y="Resource", color="Color")
+else:
+    rad_gantt_fig = px.line(title="No Radicals need to be mastered at this time")
+
+if not kanji_df.empty:
+    kanji_gantt_fig = px.timeline(kanji_df, x_start="Start",x_end="Finish",y="Resource", color="Color")
+else:
+    kanji_gantt_fig = px.line(title="No Kanji need to be mastered at this time")
+
+lr_data = wk_progress_review.collect_lesson_review_data(AUTH_HEADER, current_level)
+lr_data = lr_data.transpose()
+lr_bar_fig = px.bar(lr_data)
+
 
 app.title = "WaniKani Analytics: Understand Your WaniKani!"
 
@@ -107,6 +118,14 @@ app.layout = html.Div(
                         id="Kanji_Gantt",
                         config={"displayModeBar": False},
                         figure=kanji_gantt_fig,
+                    ),
+                    className="card",
+                ),
+                html.Div(
+                    children=dcc.Graph(
+                        id="Lesson_Review_Breakdown",
+                        config={"displayModeBar": False},
+                        figure=lr_bar_fig,
                     ),
                     className="card",
                 ),
