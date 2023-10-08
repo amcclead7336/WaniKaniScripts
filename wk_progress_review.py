@@ -37,13 +37,14 @@ def collect_data(endpoint, AUTH_HEADER):
 
             level_data = req.json()
 
-            if level_data['pages']['next_url'] is not None:
+            if level_data.get("pages") and level_data['pages']['next_url'] is not None:
                 vprint("Next url is present")
                 tmp_data = requests.get(level_data['pages']['next_url'], headers=AUTH_HEADER).json()
                 level_data['data'] += tmp_data['data']
 
                 while tmp_data['pages']['next_url'] is not None:
-                    tmp_data = requests.get(level_data['pages']['next_url'], headers=AUTH_HEADER)
+                    print(tmp_data['pages']['next_url'])
+                    tmp_data = requests.get(tmp_data['pages']['next_url'], headers=AUTH_HEADER).json()
                     level_data['data'] += tmp_data['data']
 
 
@@ -141,11 +142,16 @@ def create_level_lines():
 
 def create_gantt_data(AUTH_HEADER):
 
+    with open("Store/level_progressions.json") as f:
+        level_json = json.load(f)
+        current_level = max([level['data']['level'] for level in level_json["data"]])
+
+
     current_time = datetime.datetime.now()
-    rad_data = collect_data("assignments?levels=5&subject_types=radical",AUTH_HEADER)
-    kanji_data = collect_data("assignments?levels=5&subject_types=kanji",AUTH_HEADER)
+    rad_data = collect_data(f"assignments?levels={current_level}&subject_types=radical",AUTH_HEADER)
+    kanji_data = collect_data(f"assignments?levels={current_level}&subject_types=kanji",AUTH_HEADER)
     srs_interval_data = collect_data("spaced_repetition_systems?ids=1",AUTH_HEADER)
-    subject_data = collect_data("subjects?levels=5&types=radical,kanji",AUTH_HEADER)
+    subject_data = collect_data(f"subjects?levels={current_level}&types=radical,kanji",AUTH_HEADER)
 
     interval_dict = {stage['position']: datetime.timedelta(days=0,seconds=stage['interval']) for stage in srs_interval_data['data'][0]['data']['stages'][1:6]}
     subject_id_slug_dict = {sub['id']: sub['data']['slug'] for sub in subject_data['data']}
@@ -164,19 +170,73 @@ def create_gantt_data(AUTH_HEADER):
                 subject_id = subject['data']['subject_id']
                 subject_name = subject_id_slug_dict[subject_id]
                 srs_stage = subject['data']['srs_stage']
-                finish_time = available_at_time + interval_dict[srs_stage]
+                if srs_stage == 4:
+                    finish_time = available_at_time + datetime.timedelta(days=0,minutes=60)
+                else:
+                    finish_time = available_at_time + interval_dict[srs_stage]
 
                 out_list.append(dict(Task=f"SRS {srs_stage}",Start=available_at_time,Finish=finish_time,Resource=subject_name,Color=color))
 
                 if srs_stage < 4:
                     for i in range(srs_stage+1, 5):
                         available_at_time = finish_time
-                        finish_time = available_at_time + interval_dict[i]
+                        if i != 4:
+                            finish_time = available_at_time + interval_dict[i]
+                        else:
+                            finish_time = available_at_time + datetime.timedelta(days=0,minutes=60)
                         out_list.append(dict(Task=f"SRS {i}",Start=available_at_time,Finish=finish_time,Resource=subject_name,Color="Blue"))
 
     r_df = pd.DataFrame(rad_out_list)
     k_df = pd.DataFrame(kanji_out_list)
 
-    r_df = r_df.sort_values("Start", ascending=False)
-    k_df = k_df.sort_values("Start", ascending=False)
-    return r_df, k_df
+    print(r_df)
+    print(k_df)
+
+    if not r_df.empty:
+        r_df = r_df.sort_values("Start", ascending=False)
+    if not k_df.empty:
+        k_df = k_df.sort_values("Start", ascending=False)
+    return r_df, k_df, current_level
+
+
+def subject_split(split_filter,sub_id_type_dict, summary_data):
+
+    return_dict = {
+        "Radicals": 0,
+        "Kanji": 0,
+        "Vocabulary": 0,
+        "Kana_Vocabulary": 0
+    }
+
+    for tmp_subject_id in summary_data['data'][split_filter][0]["subject_ids"]:
+        s_type = sub_id_type_dict[tmp_subject_id]
+        
+        if s_type == "radical":
+            return_dict['Radicals'] += 1
+        elif s_type == "kanji":
+            return_dict['Kanji'] += 1
+        elif s_type == "vocabulary":
+            return_dict['Vocabulary'] += 1
+        else:
+            return_dict['Kana_Vocabulary'] += 1
+
+    return return_dict
+
+
+def collect_lesson_review_data(AUTH_HEADER, current_level):
+    summary_data = collect_data("summary", AUTH_HEADER)
+    level_filter = ",".join([str(i) for i in range(1, current_level+1)])
+    subjects_data = collect_data(f"subjects?levels={level_filter}", AUTH_HEADER)
+
+    sub_id_type_dict = { subject['id']:subject['object'] for subject in subjects_data['data']}
+
+    lesson_counts = subject_split("lessons", sub_id_type_dict, summary_data)
+    review_counts = subject_split("reviews", sub_id_type_dict, summary_data)
+
+    data = pd.DataFrame({"Lessons":lesson_counts,
+                         "Reviews":review_counts})
+
+    return data.copy()
+        
+
+    
